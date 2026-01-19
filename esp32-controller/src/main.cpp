@@ -1,82 +1,90 @@
-#include <Arduino.h>
 #include <WiFi.h>
-#include <HTTPClient.h>
-#include <ESPmDNS.h>
+#include <esp_now.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
-#include <DHT.h>
+#include "DHT.h"
 
 #define DHTPIN 4
 #define DHTTYPE DHT11
 
-const char* ssid = "ZTE_2.4G_jT5nRx_EXT";
-const char* password = "4kjL9URf";
-
-const char* sonoffHost = "humidifier.local";
-
-float ON_TEMP  = 28.0;
-float OFF_TEMP = 26.0;
+#define ON_THRESHOLD  27.0
+#define OFF_THRESHOLD 26.0
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 DHT dht(DHTPIN, DHTTYPE);
 
-bool humidifierState = false;
+// Replace with your Sonoff S31 MAC address
+uint8_t receiverMac[] = {0x48, 0x3F, 0xDA, 0x28, 0xA8, 0xF5};
 
-void controlHumidifier(bool turnOn) {
-  HTTPClient http;
-  String url = String("http://") + sonoffHost + (turnOn ? "/on" : "/off");
+typedef struct struct_message {
+  float temperature;
+  bool humidifierState;
+} struct_message;
 
-  http.begin(url);
-  int httpCode = http.GET();
-  http.end();
-
-  humidifierState = turnOn;
-}
+struct_message dataToSend;
+bool currentState = false;
 
 void setup() {
   Serial.begin(115200);
-  Wire.begin(21, 22);
-  lcd.init();
-  lcd.backlight();
   dht.begin();
 
+  // LCD init
+  lcd.init();
+  lcd.backlight();
   lcd.setCursor(0,0);
-  lcd.print("Connecting WiFi");
-
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    lcd.print(".");
-  }
-
-  if (MDNS.begin("mushroom-esp32")) {
-    Serial.println("mDNS started");
-  }
-
-  lcd.clear();
-  lcd.print("System Ready");
+  lcd.print("Temp Monitor");
+  lcd.setCursor(0,1);
+  lcd.print("Starting...");
   delay(2000);
+  lcd.clear();
+
+  WiFi.mode(WIFI_STA);
+
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("ESP-NOW init failed");
+    return;
+  }
+
+  esp_now_peer_info_t peerInfo = {};
+  memcpy(peerInfo.peer_addr, receiverMac, 6);
+  peerInfo.channel = 0;
+  peerInfo.encrypt = false;
+  esp_now_add_peer(&peerInfo);
 }
 
 void loop() {
   float temp = dht.readTemperature();
 
-  lcd.clear();
+  if (isnan(temp)) {
+    lcd.setCursor(0,0);
+    lcd.print("DHT Error      ");
+    delay(2000);
+    return;
+  }
+
+  // Hysteresis logic
+  if (temp >= ON_THRESHOLD) currentState = true;
+  else if (temp <= OFF_THRESHOLD) currentState = false;
+
+  dataToSend.temperature = temp;
+  dataToSend.humidifierState = currentState;
+  esp_now_send(receiverMac, (uint8_t *)&dataToSend, sizeof(dataToSend));
+
+  // LCD Display
   lcd.setCursor(0,0);
   lcd.print("Temp: ");
   lcd.print(temp,1);
-  lcd.print("C");
-
-  if (!humidifierState && temp >= ON_TEMP) {
-    controlHumidifier(true);
-  }
-  if (humidifierState && temp <= OFF_TEMP) {
-    controlHumidifier(false);
-  }
+  lcd.print((char)223);
+  lcd.print("C   ");
 
   lcd.setCursor(0,1);
-  lcd.print("Humidifier: ");
-  lcd.print(humidifierState ? "ON " : "OFF");
+  lcd.print("Humid: ");
+  lcd.print(currentState ? "ON " : "OFF");
+
+  Serial.print("Temp: ");
+  Serial.print(temp);
+  Serial.print(" | Humidifier: ");
+  Serial.println(currentState ? "ON" : "OFF");
 
   delay(3000);
 }

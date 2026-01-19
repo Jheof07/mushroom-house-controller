@@ -6,18 +6,18 @@
 const char* ssid = "ZTE_2.4G_jT5nRx_EXT";
 const char* password = "4kjL9URf";
 
-#define RELAY_PIN 12   // Active LOW relay
+#define RELAY_PIN 12   
 
 ESP8266WebServer server(80);
 
 // Logical control functions
 void humidifierOn() {
-  digitalWrite(RELAY_PIN, HIGH);   // LOW = relay ON (physical)
+  digitalWrite(RELAY_PIN, HIGH);   
   server.send(200, "text/plain", "Humidifier ON");
 }
 
 void humidifierOff() {
-  digitalWrite(RELAY_PIN, LOW);  // HIGH = relay OFF (physical)
+  digitalWrite(RELAY_PIN, LOW);  
   server.send(200, "text/plain", "Humidifier OFF");
 }
 
