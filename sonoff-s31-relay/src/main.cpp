@@ -6,17 +6,18 @@
 const char* ssid = "ZTE_2.4G_jT5nRx_EXT";
 const char* password = "4kjL9URf";
 
-#define RELAY_PIN 12
+#define RELAY_PIN 12   // Active LOW relay
 
 ESP8266WebServer server(80);
 
-void handleOn() {
-  digitalWrite(RELAY_PIN, LOW);   // Sonoff relay is active LOW
+// Logical control functions
+void humidifierOn() {
+  digitalWrite(RELAY_PIN, HIGH);   // LOW = relay ON (physical)
   server.send(200, "text/plain", "Humidifier ON");
 }
 
-void handleOff() {
-  digitalWrite(RELAY_PIN, HIGH);
+void humidifierOff() {
+  digitalWrite(RELAY_PIN, LOW);  // HIGH = relay OFF (physical)
   server.send(200, "text/plain", "Humidifier OFF");
 }
 
@@ -26,7 +27,7 @@ void handleRoot() {
 
 void setup() {
   pinMode(RELAY_PIN, OUTPUT);
-  digitalWrite(RELAY_PIN, HIGH);  // Start OFF
+  humidifierOff();   // Start safely OFF
 
   Serial.begin(115200);
   WiFi.begin(ssid, password);
@@ -40,9 +41,10 @@ void setup() {
     Serial.println("mDNS started: http://humidifier.local");
   }
 
+  // URL routes
   server.on("/", handleRoot);
-  server.on("/on", handleOn);
-  server.on("/off", handleOff);
+  server.on("/on", humidifierOn);    // Logical ON
+  server.on("/off", humidifierOff);  // Logical OFF
 
   server.begin();
 }
