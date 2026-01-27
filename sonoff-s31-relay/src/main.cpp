@@ -5,7 +5,9 @@
 
 typedef struct struct_message {
   float temperature;
+  float humidity;
   bool humidifierState;
+  bool fanState;
 } struct_message;
 
 struct_message incomingData;
@@ -13,7 +15,7 @@ struct_message incomingData;
 void OnDataRecv(uint8_t *mac, uint8_t *incomingDataRaw, uint8_t len) {
   memcpy(&incomingData, incomingDataRaw, sizeof(incomingData));
 
-  digitalWrite(RELAY_PIN, incomingData.humidifierState ? HIGH : LOW);
+  digitalWrite(RELAY_PIN, incomingData.fanState ? HIGH : LOW);
 }
 
 void setup() {

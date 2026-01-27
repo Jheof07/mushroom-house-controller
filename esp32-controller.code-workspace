@@ -5,6 +5,10 @@
 		},
 		{
 			"path": "sonoff-s31-relay"
+		},
+		{
+			"name": "sonoff-s31-relay-humidifier",
+			"path": "sonoff-s31-relay-humidifier"
 		}
 	],
 	"settings": {}
