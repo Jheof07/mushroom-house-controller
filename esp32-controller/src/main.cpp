@@ -14,7 +14,7 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 DHT dht(DHTPIN, DHTTYPE);
 
 // Replace with your Sonoff S31 MAC address
-uint8_t receiverMac[] = {0x48, 0x3F, 0xDA, 0x28, 0xA8, 0xF5};
+uint8_t receiverMac[] = {0x48, 0x3F, 0xDA, 0x28, 0x2F, 0xDB};
 
 typedef struct struct_message {
   float temperature;
