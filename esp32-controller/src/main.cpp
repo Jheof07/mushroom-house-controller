@@ -7,15 +7,15 @@
 
 #define DHTTYPE DHT11
 #define DHTPIN 4
-#define TEMP_ON_THRESHOLD 28.0
-#define TEMP_OFF_THRESHOLD 26.0
-#define HUMI_ON_THRESHOLD 70.0
+#define TEMP_ON_THRESHOLD 25.0
+#define TEMP_OFF_THRESHOLD 27.0
+#define HUMI_ON_THRESHOLD 65.0
 #define HUMI_OFF_THRESHOLD 90.0
 
 DHT dht(DHTPIN, DHTTYPE);
-LiquidCrystal_I2C lcd(0x27, 16, 2);
+LiquidCrystal_I2C lcd(0x27, 20, 4);
 uint8_t sonoff_fan_MAC[6]= {0x48, 0x3E, 0xDA, 0x28, 0xA8, 0xF5};
-uint8_t sonoff_humidifier_MAC[6]= {0x48, 0x3F, 0xDA, 0x28, 0xA8, 0xF5};
+uint8_t sonoff_humidifier_MAC[6]= {0x48, 0x3F, 0xDA, 0x28, 0x2F, 0xDB};
 
 typedef struct struct_message {
   float temperature;
@@ -103,13 +103,13 @@ void loop() {
   esp_now_send(sonoff_humidifier_MAC, (uint8_t*)&dataToSend_sonoff_humidifier, sizeof(dataToSend_sonoff_humidifier));
   
   // To display in LCD
-  lcd.setCursor(0,0);
-  lcd.print("Temp: ");
+  lcd.setCursor(0,2);
+  lcd.print("Temperature: ");
   lcd.print(temp, 1);
   lcd.print((char)223);
   lcd.print("C");
-  lcd.setCursor(0,1);
-  lcd.print("Humi: ");
+  lcd.setCursor(0,3);
+  lcd.print("Humidity: ");
   lcd.print(humidity, 1);
   lcd.print("%");
 
