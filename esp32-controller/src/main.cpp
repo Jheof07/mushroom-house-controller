@@ -7,68 +7,88 @@
 
 #define DHTTYPE DHT11
 #define DHTPIN 4
-#define TEMP_ON_THRESHOLD 25.0
-#define TEMP_OFF_THRESHOLD 27.0
-#define HUMI_ON_THRESHOLD 65.0
-#define HUMI_OFF_THRESHOLD 90.0
 
+#define TEMP_ON_THRESHOLD  27.0
+#define TEMP_OFF_THRESHOLD 26.0
+
+#define HUM_ON_THRESHOLD  65.0
+#define HUM_OFF_THRESHOLD 70.0
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
 DHT dht(DHTPIN, DHTTYPE);
-LiquidCrystal_I2C lcd(0x27, 20, 4);
-uint8_t sonoff_fan_MAC[6]= {0x48, 0x3E, 0xDA, 0x28, 0xA8, 0xF5};
-uint8_t sonoff_humidifier_MAC[6]= {0x48, 0x3F, 0xDA, 0x28, 0x2F, 0xDB};
+
+// Sonoff MAC Addresses
+uint8_t receiverMac1[] = {0x48, 0x3F, 0xDA, 0x28, 0xA8, 0xF5};
+uint8_t receiverMac2[] = {0x48, 0x3F, 0xDA, 0x28, 0x2F, 0xDB};
 
 typedef struct struct_message {
   float temperature;
   float humidity;
-  bool humidifierState;
-  bool fanState;
+  bool tempRelayState;
+  bool humidifierRelayState;
 } struct_message;
 
-struct_message dataToSend_sonoff_fan;
-struct_message dataToSend_sonoff_humidifier;
+struct_message dataToSend;
+bool tempRelayState = false;
+bool humidityRelayState = false;
 
-bool currentState_fan = false;
-bool currentState_humidifier = false;
+// Send Status Callback
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+  Serial.print("Send Status: ");
+  if (status == ESP_NOW_SEND_SUCCESS) {
+    Serial.println("Success");
+  } else {
+    Serial.println("Fail");
+  }
+}
+
+void addPeer(uint8_t *mac) {
+  esp_now_peer_info_t peerInfo = {};
+  memcpy(peerInfo.peer_addr, mac, 6);
+  peerInfo.channel = 0;     // auto channel
+  peerInfo.encrypt = false;
+
+  if (esp_now_add_peer(&peerInfo) == ESP_OK) {
+    Serial.println("Peer Added Successfully");
+  } else {
+    Serial.println("Failed to Add Peer");
+  }
+}
 
 void setup() {
   Serial.begin(115200);
+
+  // Initialize DHT
   dht.begin();
+
+  // Initialize LCD
   lcd.init();
   lcd.backlight();
 
+  // WiFI in Station Mode
   WiFi.mode(WIFI_STA);
 
-  if(esp_now_init() != ESP_OK){
+  // Initialize ESP-NOW
+  if (esp_now_init() != ESP_OK) {
     Serial.println("ESP-NOW init failed");
     return;
   }
 
-  esp_now_peer_info_t sonoff_fan = {};
-  memcpy(sonoff_fan.peer_addr, sonoff_fan_MAC, 6);
-  sonoff_fan.channel = 0;
-  sonoff_fan.encrypt = false;
+  esp_now_register_send_cb(OnDataSent);
 
-  if(esp_now_add_peer(&sonoff_fan) != ESP_OK){
-    Serial.println("Failed to add Sonoff Fan");
-    return;
-  }
+  // Add both receivers
+  addPeer(receiverMac1);
+  addPeer(receiverMac2);
 
-  esp_now_peer_info_t sonoff_humidifier = {};
-  memcpy(sonoff_humidifier.peer_addr, sonoff_humidifier_MAC, 6);
-  sonoff_humidifier.channel = 0;
-  sonoff_humidifier.encrypt = false;
-  
-  if(esp_now_add_peer(&sonoff_humidifier) != ESP_OK){
-    Serial.println("Failed to add Sonoff Humidifier");
-    return;
-  }
+  Serial.println("System Ready.");
+
 }
 
 void loop() {
   float temp = dht.readTemperature();
-  float humidity = dht.readHumidity();
-  
-  if(isnan(temp) || isnan(humidity)){
+  float hum = dht.readHumidity();
+
+  if (isnan(temp) || isnan(hum)) {
     lcd.setCursor(0,0);
     lcd.print("DHT Error       ");
     Serial.println("DHT Read Failed");
@@ -76,53 +96,46 @@ void loop() {
     return;
   }
 
-  //Hysterisis Logic
-  if (temp >= TEMP_ON_THRESHOLD)
-    currentState_fan = true;
-  else if (temp <= TEMP_OFF_THRESHOLD)
-    currentState_fan = false;
+  // Temperature Hysteresis
+  if (temp >= TEMP_ON_THRESHOLD) tempRelayState = true;
+  else if (temp <= TEMP_OFF_THRESHOLD) tempRelayState = false;
 
-  if (humidity <= HUMI_ON_THRESHOLD)
-    currentState_humidifier = true;
-  else if (humidity >= HUMI_OFF_THRESHOLD)
-    currentState_humidifier = false;
+  // Humidity Hysteresis
+  if (hum <= HUM_ON_THRESHOLD) humidityRelayState = true;
+  else if (hum >= HUM_OFF_THRESHOLD) humidityRelayState = false;
 
-  // Sending to Sonoff Fan  
-  dataToSend_sonoff_fan.temperature = temp;
-  dataToSend_sonoff_fan.humidity = humidity;
-  dataToSend_sonoff_fan.humidifierState = currentState_humidifier;
-  dataToSend_sonoff_fan.fanState = currentState_fan;
-  esp_now_send(sonoff_fan_MAC, (uint8_t*)&dataToSend_sonoff_fan, sizeof(dataToSend_sonoff_fan));
+  // Prepare Data
+  dataToSend.temperature = temp;
+  dataToSend.humidity = hum;
+  dataToSend.tempRelayState = tempRelayState;
+  dataToSend.humidifierRelayState = humidityRelayState;
 
+  //Send to Both Sonoff
+  esp_err_t result1 = esp_now_send(receiverMac1, (uint8_t *)&dataToSend, sizeof(dataToSend));
+  esp_err_t result2 = esp_now_send(receiverMac2, (uint8_t *)&dataToSend, sizeof(dataToSend));
 
-  // Sending to Sonoff Humidifier
-  dataToSend_sonoff_humidifier.temperature = temp;
-  dataToSend_sonoff_humidifier.humidity = humidity;
-  dataToSend_sonoff_humidifier.humidifierState = currentState_humidifier;
-  dataToSend_sonoff_humidifier.fanState = currentState_fan;
-  esp_now_send(sonoff_humidifier_MAC, (uint8_t*)&dataToSend_sonoff_humidifier, sizeof(dataToSend_sonoff_humidifier));
-  
-  // To display in LCD
-  lcd.setCursor(0,2);
-  lcd.print("Temperature: ");
-  lcd.print(temp, 1);
+  if (result1 != ESP_OK) Serial.println("Error sending to Receiver 1");
+  if (result2 != ESP_OK) Serial.println("Error sending to Receiver 2");
+
+  // LCD Display
+  lcd.setCursor(0,0);
+  lcd.print("T: ");
+  lcd.print(temp,1);
   lcd.print((char)223);
-  lcd.print("C");
-  lcd.setCursor(0,3);
-  lcd.print("Humidity: ");
-  lcd.print(humidity, 1);
+  lcd.print("C H:");
+  lcd.print(hum,0);
   lcd.print("%");
 
-  // To print in the Serial Monitor
-  Serial.print("Temperature: ");
-  Serial.print(temp, 1);
-  Serial.print("°C");
-  Serial.print("   ");
-  Serial.print("Humidity: ");
-  Serial.print(humidity, 1);
-  Serial.println("%");
-  
-  delay(2000);
-  lcd.clear();
-}
+  lcd.setCursor(0,1);
+  lcd.print("T:");
+  lcd.print(tempRelayState ? "ON " : "OFF");
+  lcd.print(" H:");
+  lcd.print(humidityRelayState ? "ON " : "OFF");
 
+  Serial.print("Temp: "); Serial.print(temp);
+  Serial.print("  Hum: "); Serial.print(hum);
+  Serial.print("  T_Relay: "); Serial.print(tempRelayState);
+  Serial.print("  H_Relay: "); Serial.println(humidityRelayState);
+
+  delay(3000);
+}
