@@ -22,7 +22,7 @@ void OnDataRecv(uint8_t *mac, uint8_t *incomingDataRaw, uint8_t len) {
 
     memcpy(&incomingData, incomingDataRaw, sizeof(incomingData));
 
-    bool newState = incomingData.tempRelayState;
+    bool newState = incomingData.humidifierRelayState;
 
     if (newState != currentRelayState) {
       digitalWrite(RELAY_PIN, newState ? HIGH : LOW);
